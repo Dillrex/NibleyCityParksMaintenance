@@ -204,7 +204,3 @@ def unread_tickets():
         c.execute("SELECT COUNT(*) FROM tickets WHERE completed = 0")
         count = c.fetchone()[0]
     return jsonify({"new_tickets": count > 0})
-
-
-if __name__ == '__main__':
-    app.run(debug=True)
