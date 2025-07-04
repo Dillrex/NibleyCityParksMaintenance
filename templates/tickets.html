@@ -1,23 +1,29 @@
+
 <!DOCTYPE html>
 <html>
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Open Tickets</title>
+    <title>Active Tickets</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-    <div class="container">
-        <h2>Open Tickets</h2>
-        {% for t in tickets %}
-        <div class="card">
-            <p><strong>Issue:</strong> {{ t[2] }}</p>
-            <p><strong>Submitted:</strong> {{ t[3] }}</p>
-            <form method="POST" action="{{ url_for('complete_ticket', ticket_id=t[0]) }}">
-                <button type="submit">Complete</button>
-            </form>
+<div class="container">
+    <h2>Open Tickets</h2>
+    {% for t in tickets %}
+    <div class="card" style="margin-bottom: 10px;">
+        <p><strong>{{ t['equipment_name'] }}</strong></p>
+        <p>{{ t['issue'] }}</p>
+        <p>Status: {% if t['unread'] %}<strong style="color:red;">Unread</strong>{% else %}Read{% endif %}</p>
+        <div style="margin-top: 5px;">
+            {% if t['unread'] %}
+            <a href="{{ url_for('mark_ticket_read', ticket_id=t['id']) }}"><button>Mark as Read</button></a>
+            {% endif %}
+            <a href="{{ url_for('complete_ticket', ticket_id=t['id']) }}"><button>Complete</button></a>
         </div>
-        {% endfor %}
-        <br><a href="{{ url_for('dashboard') }}">← Back to Dashboard</a>
     </div>
+    {% else %}
+    <p>No open tickets.</p>
+    {% endfor %}
+    <a href="{{ url_for('dashboard') }}"><button>Back to Dashboard</button></a>
+</div>
 </body>
 </html>

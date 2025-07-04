@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Notes - {{ equipment.name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .note-box {
+            background: #fff;
+            padding: 10px;
+            border-radius: 6px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 10px;
+        }
+        .note-box form { margin-top: 5px; }
+        .note-box input { width: 100%; padding: 5px; font-size: 14px; }
+        .note-box button { padding: 4px 6px; margin-top: 5px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2>Notes for {{ equipment.name }}</h2>
+    {% for note in notes %}
+    <div class="note-box">
+        <form method="POST" action="{{ url_for('edit_note', note_id=note['id']) }}">
+            <input name="content" value="{{ note['content'] }}">
+            <small>{{ note['timestamp'] }}</small><br>
+            <button type="submit">Update</button>
+            <a href="{{ url_for('delete_note', note_id=note['id']) }}"><button type="button">Delete</button></a>
+        </form>
+    </div>
+    {% else %}
+    <p>No notes yet.</p>
+    {% endfor %}
+    <hr>
+    <form method="POST" action="{{ url_for('add_note', equipment_id=equipment.id) }}">
+        <input name="content" placeholder="Add new note..." required>
+        <button type="submit">Add Note</button>
+    </form>
+    <br>
+    <a href="{{ url_for('dashboard') }}"><button>Back to Dashboard</button></a>
+</div>
+</body>
+</html>

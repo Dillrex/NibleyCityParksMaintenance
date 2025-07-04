@@ -1,75 +1,114 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .card {
+            font-size: 11px;
+            padding: 8px;
+            border-radius: 6px;
+            flex: 1 1 calc(20% - 10px);
+            min-width: 140px;
+            background: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .card form, .card h3, .card select, .card input, .card button {
+            margin: 2px 0;
+            font-size: 11px;
+        }
+        .card button {
+            padding: 3px 5px;
+        }
+        .navbar {
+            background: #2c3e50;
+            color: white;
+            padding: 10px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .navbar a {
+            text-decoration: none;
+            color: white;
+            margin-right: 15px;
+        }
+        .countdown {
+            font-size: 10px;
+            color: #555;
+            margin-top: -4px;
+        }
+        .alert {
+            background-color: #f8d7da;
+            padding: 5px;
+            margin-bottom: 10px;
+            color: #721c24;
+        }
+    </style>
+    <script>
+    function searchEquipment() {
+        let input = document.getElementById('search').value.toLowerCase();
+        let cards = document.getElementsByClassName('card');
+        for (let i = 0; i < cards.length; i++) {
+            let name = cards[i].getAttribute('data-name').toLowerCase();
+            cards[i].style.display = name.includes(input) ? 'block' : 'none';
+        }
+    }
+
+    function toggleCustomStatus(selectEl) {
+        const input = selectEl.nextElementSibling;
+        if (selectEl.value === 'Custom') {
+            input.style.display = 'inline';
+        } else {
+            input.style.display = 'none';
+            input.value = selectEl.value;
+        }
+    }
+    </script>
 </head>
 <body>
-    <div class="navbar">
-        <div>Welcome, {{ user }}</div>
-        <div>
-            <a href="{{ url_for('equipment') }}" style="color:white;margin-right:15px;">+ Add Equipment</a>
-            <a href="{{ url_for('view_tickets') }}" style="color:white;margin-right:15px;">Tickets</a>
-            {% if is_admin %}
-            <a href="{{ url_for('admin_panel') }}" style="color:white;margin-right:15px;">Admin Panel</a>
-            {% endif %}
-            <a href="{{ url_for('logout') }}" style="color:white;">Logout</a>
-        </div>
+<div class="navbar">
+    <div>Welcome, {{ user }}</div>
+    <div>
+        <a href="{{ url_for('add_equipment') }}">+ Add Equipment</a>
+        <a href="{{ url_for('view_tickets') }}">Tickets</a>
+        {% if user == 'Rod' %}
+        <a href="{{ url_for('admin_panel') }}">Admin</a>
+        {% endif %}
+        <a href="{{ url_for('logout') }}">Logout</a>
     </div>
+</div>
 
-    <div class="container">
-        <h2>Equipment</h2>
-        <input type="text" id="search-box" placeholder="Search equipment...">
-        <div id="equipment-container">Loading...</div>
-    <div class="comment-section">
-        <h3>Comments</h3>
-        <form method="POST" action="{{ url_for('add_comment') }}">
-            <input type="hidden" name="equipment_id" value="{{ equipment.id }}">
-            <textarea name="comment" placeholder="Add your note..." required></textarea>
-            <button type="submit">Add Comment</button>
+<div class="container">
+    <input type="text" id="search" onkeyup="searchEquipment()" placeholder="Search Equipment..." style="width:100%; padding:8px; margin-bottom:8px;">
+    {% if unread > 0 %}
+    <div class="alert">You have {{ unread }} unread ticket(s)</div>
+    {% endif %}
+    <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+    {% for e in equipment %}
+    <div class="card" data-name="{{ e['name'] }}">
+        <h3>{{ e['name'] }}</h3>
+        <form method="POST" action="{{ url_for('update_equipment', equipment_id=e['id']) }}">
+            <label>Status:</label>
+            <select name="status_select" onchange="toggleCustomStatus(this)">
+                <option {% if e['status'] == 'Working' %}selected{% endif %}>Working</option>
+                <option {% if e['status'] == 'Broken' %}selected{% endif %}>Broken</option>
+                <option {% if e['status'] == 'Needs oil change' %}selected{% endif %}>Needs oil change</option>
+                <option {% if e['status'] not in ['Working', 'Broken', 'Needs oil change'] %}selected{% endif %}>Custom</option>
+            </select>
+            <input name="status" type="text" placeholder="Enter custom status"
+                style="display: {{ 'inline' if e['status'] not in ['Working', 'Broken', 'Needs oil change'] else 'none' }};"
+                value="{{ e['status'] if e['status'] not in ['Working', 'Broken', 'Needs oil change'] else '' }}">
+            <br>
+            <label>Oil (days):</label>
+            <input name="interval" type="number" value="{{ e['oil_interval'] }}" style="width: 60px;"><br>
+            <div class="countdown">Next oil change in {{ e['days_left'] }} day(s)</div>
+            <button type="submit">Save</button>
         </form>
-        <div class="comments-list">
-            {% for comment in equipment.comments %}
-                <div class="comment">
-                    <p>{{ comment.text }}</p>
-                    <span class="timestamp">{{ comment.timestamp.strftime('%Y-%m-%d %H:%M') }}</span>
-                </div>
-            {% endfor %}
-        </div>
+        <a href="{{ url_for('view_notes', equipment_id=e['id']) }}"><button>View Notes</button></a>
+        <a href="{{ url_for('delete_equipment', equipment_id=e['id']) }}" onclick="return confirm('Are you sure you want to delete this equipment?');"><button>Delete</button></a>
     </div>
-
+    {% endfor %}
     </div>
-
-    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
-
-    <!-- ✅ Retry logic goes here, just before </body> -->
-    <script>
-    (function autoRetryGatewayError() {
-      const maxAttempts = 5;
-      const delayBetweenAttempts = 5000;
-      let attempts = 0;
-
-      function checkStatus() {
-        fetch(window.location.href, { cache: 'no-store' })
-          .then(res => {
-            if (!res.ok) throw new Error('Retrying due to bad response');
-          })
-          .catch(() => {
-            if (attempts < maxAttempts) {
-              attempts++;
-              console.warn(`Retrying load (attempt ${attempts})...`);
-              setTimeout(() => location.reload(), delayBetweenAttempts);
-            } else {
-              alert("Still having trouble loading the page.");
-            }
-          });
-      }
-
-      window.addEventListener('load', () => {
-        setTimeout(checkStatus, 1500);
-      });
-    })();
-    </script>
+</div>
 </body>
 </html>
