@@ -17,11 +17,42 @@
             <a href="{{ url_for('logout') }}" style="color:white;">Logout</a>
         </div>
     </div>
+
     <div class="container">
         <h2>Equipment</h2>
         <input type="text" id="search-box" placeholder="Search equipment...">
         <div id="equipment-container">Loading...</div>
     </div>
+
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+
+    <!-- ✅ Retry logic goes here, just before </body> -->
+    <script>
+    (function autoRetryGatewayError() {
+      const maxAttempts = 5;
+      const delayBetweenAttempts = 5000;
+      let attempts = 0;
+
+      function checkStatus() {
+        fetch(window.location.href, { cache: 'no-store' })
+          .then(res => {
+            if (!res.ok) throw new Error('Retrying due to bad response');
+          })
+          .catch(() => {
+            if (attempts < maxAttempts) {
+              attempts++;
+              console.warn(`Retrying load (attempt ${attempts})...`);
+              setTimeout(() => location.reload(), delayBetweenAttempts);
+            } else {
+              alert("Still having trouble loading the page.");
+            }
+          });
+      }
+
+      window.addEventListener('load', () => {
+        setTimeout(checkStatus, 1500);
+      });
+    })();
+    </script>
 </body>
 </html>
