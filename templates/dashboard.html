@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="navbar">
+        <div>Welcome, {{ user }}</div>
+        <div>
+            <a href="{{ url_for('equipment') }}" style="color:white;margin-right:15px;">+ Add Equipment</a>
+            <a href="{{ url_for('view_tickets') }}" style="color:white;margin-right:15px;">Tickets</a>
+            {% if is_admin %}
+            <a href="{{ url_for('admin_panel') }}" style="color:white;margin-right:15px;">Admin Panel</a>
+            {% endif %}
+            <a href="{{ url_for('logout') }}" style="color:white;">Logout</a>
+        </div>
+    </div>
+    <div class="container">
+        <h2>Equipment</h2>
+        <input type="text" id="search-box" placeholder="Search equipment...">
+        <div id="equipment-container">Loading...</div>
+    </div>
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>

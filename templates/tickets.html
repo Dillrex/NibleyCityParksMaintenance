@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Open Tickets</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h2>Open Tickets</h2>
+        {% for t in tickets %}
+        <div class="card">
+            <p><strong>Issue:</strong> {{ t[2] }}</p>
+            <p><strong>Submitted:</strong> {{ t[3] }}</p>
+            <form method="POST" action="{{ url_for('complete_ticket', ticket_id=t[0]) }}">
+                <button type="submit">Complete</button>
+            </form>
+        </div>
+        {% endfor %}
+        <br><a href="{{ url_for('dashboard') }}">← Back to Dashboard</a>
+    </div>
+</body>
+</html>
