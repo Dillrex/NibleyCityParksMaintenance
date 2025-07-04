@@ -265,10 +265,16 @@ def mark_ticket_read(ticket_id):
 @app.route('/complete_ticket/<int:ticket_id>')
 def complete_ticket(ticket_id):
     db = get_db()
-    db.execute("UPDATE tickets SET complete = 1 WHERE id = ?", (ticket_id,))
+    db.execute("UPDATE tickets SET complete = 1, unread = 0 WHERE id = ?", (ticket_id,))
     db.commit()
     return redirect(url_for('view_tickets'))
 
+@app.route('/mark_all_read')
+def mark_all_read():
+    db = get_db()
+    db.execute("UPDATE tickets SET unread = 0 WHERE unread = 1")
+    db.commit()
+    return redirect(url_for('view_tickets'))
 
 if __name__ == '__main__':
     create_tables()
