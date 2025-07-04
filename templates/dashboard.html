@@ -22,6 +22,23 @@
         <h2>Equipment</h2>
         <input type="text" id="search-box" placeholder="Search equipment...">
         <div id="equipment-container">Loading...</div>
+    <div class="comment-section">
+        <h3>Comments</h3>
+        <form method="POST" action="{{ url_for('add_comment') }}">
+            <input type="hidden" name="equipment_id" value="{{ equipment.id }}">
+            <textarea name="comment" placeholder="Add your note..." required></textarea>
+            <button type="submit">Add Comment</button>
+        </form>
+        <div class="comments-list">
+            {% for comment in equipment.comments %}
+                <div class="comment">
+                    <p>{{ comment.text }}</p>
+                    <span class="timestamp">{{ comment.timestamp.strftime('%Y-%m-%d %H:%M') }}</span>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+
     </div>
 
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
