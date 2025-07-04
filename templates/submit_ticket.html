@@ -1,31 +1,61 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Submit Ticket</title>
+    <title>Submit Maintenance Ticket</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+        }
+        form {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 400px;
+            margin: auto;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        input, textarea, select, button {
+            width: 100%;
+            margin-bottom: 12px;
+            padding: 8px;
+            font-size: 14px;
+        }
+        label {
+            font-weight: bold;
+            margin-top: 8px;
+            display: block;
+        }
+    </style>
+    <script>
+    function toggleNameField(select) {
+        const nameInput = document.getElementById('equipment_name');
+        nameInput.style.display = select.value ? 'none' : 'block';
+    }
+    </script>
 </head>
 <body>
-    <div class="container">
-        <h2>Submit Maintenance Ticket</h2>
-        <form method="POST">
-            <label>Choose Existing Equipment (or leave blank):</label>
-            <select name="equipment_id">
-                <option value="">-- Select --</option>
-                {% for eq in equipment %}
-                <option value="{{ eq[0] }}">{{ eq[1] }}</option>
-                {% endfor %}
-            </select><br>
+    <h2 style="text-align:center;">Submit Maintenance Ticket</h2>
+    <form method="POST">
+        <label>Select Existing Equipment (optional)</label>
+        <select name="equipment_id" onchange="toggleNameField(this)">
+            <option value="">-- New Equipment --</option>
+            {% for item in equipment %}
+            <option value="{{ item.id }}">{{ item.name }}</option>
+            {% endfor %}
+        </select>
 
-            <label>Or Enter New Equipment Name:</label>
-            <input type="text" name="custom_name"><br>
+        <div id="equipment_name">
+            <label>Equipment Name</label>
+            <input type="text" name="equipment_name" placeholder="Enter name of new equipment">
+        </div>
 
-            <label>Describe the Issue:</label>
-            <textarea name="issue" required></textarea><br>
+        <label>Describe the Issue</label>
+        <textarea name="issue" required placeholder="What’s wrong?"></textarea>
 
-            <button type="submit">Submit Ticket</button>
-        </form>
-        <br><a href="{{ url_for('login') }}">← Back to Login</a>
-    </div>
+        <button type="submit">Submit Ticket</button>
+        <a href="{{ url_for('login') }}"><button type="button">Back to Login</button></a>
+    </form>
 </body>
 </html>

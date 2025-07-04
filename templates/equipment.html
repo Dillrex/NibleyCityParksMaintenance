@@ -1,0 +1,23 @@
+
+<!DOCTYPE html>
+<html>
+<head><title>Add Equipment</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="container">
+    <h2>Add Equipment</h2>
+    <form method="POST">
+        <input name="name" placeholder="Equipment Name" required><br>
+        <select name="status">
+            <option>Working</option>
+            <option>Broken</option>
+            <option>Needs oil change</option>
+            <option>Custom</option>
+        </select><br>
+        <input name="interval" type="number" placeholder="Oil Change Interval (days)" required><br>
+        <button type="submit">Add</button>
+    </form>
+</div>
+</body>
+</html>

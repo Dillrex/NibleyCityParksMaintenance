@@ -1,0 +1,41 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Submit Ticket</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script>
+    function toggleNameField() {
+        var dropdown = document.getElementById('equipment_id');
+        var nameField = document.getElementById('equipment_name');
+        var selected = dropdown.options[dropdown.selectedIndex];
+        if (dropdown.value) {
+            nameField.value = selected.text;
+            nameField.readOnly = true;
+        } else {
+            nameField.value = '';
+            nameField.readOnly = false;
+        }
+    }
+    </script>
+</head>
+<body>
+<div class="container">
+    <h2>Submit Maintenance Ticket</h2>
+    <form method="POST">
+        <label>Select Existing Equipment:</label><br>
+        <select name="equipment_id" id="equipment_id" onchange="toggleNameField()">
+            <option value="">-- New Equipment --</option>
+            {% for e in equipment %}
+            <option value="{{ e['id'] }}">{{ e['name'] }}</option>
+            {% endfor %}
+        </select><br>
+        <label>Equipment Name:</label>
+        <input name="equipment_name" id="equipment_name" required><br>
+        <label>Issue / New Status:</label>
+        <input name="issue" placeholder="e.g., Broken or Needs oil change" required><br>
+        <button type="submit">Submit Ticket</button>
+    </form>
+</div>
+</body>
+</html>

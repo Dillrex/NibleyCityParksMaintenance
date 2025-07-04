@@ -1,49 +1,66 @@
-from flask import Flask, render_template, request, redirect, session, url_for, jsonify
-from datetime import datetime, timedelta
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 import sqlite3
+from datetime import datetime
 
 app = Flask(__name__)
-app.secret_key = 'NibleyCityParks9325743'
-DB_PATH = 'database.db'
+app.secret_key = 'supersecretkey'
 
-def init_db():
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("""CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY, username TEXT UNIQUE, password TEXT, is_admin INTEGER DEFAULT 0)""")
-        c.execute("""CREATE TABLE IF NOT EXISTS equipment (
-            id INTEGER PRIMARY KEY, name TEXT, type TEXT, status TEXT, oil_interval INTEGER, next_oil_change DATE)""")
-        c.execute("""CREATE TABLE IF NOT EXISTS notes (
-            id INTEGER PRIMARY KEY, equipment_id INTEGER, content TEXT, timestamp TEXT)""")
-        c.execute("""CREATE TABLE IF NOT EXISTS tickets (
-            id INTEGER PRIMARY KEY, equipment_id INTEGER, equipment_name TEXT, issue TEXT,
-            submitted_at TEXT, completed INTEGER DEFAULT 0)""")
-        c.execute("INSERT OR IGNORE INTO users (username, password, is_admin) VALUES (?, ?, ?)", ('Rod', 'Rod', 1))
-        conn.commit()
+def get_db():
+    conn = sqlite3.connect('database.db')
+    conn.row_factory = sqlite3.Row
+    return conn
 
-init_db()
+def create_tables():
+    db = get_db()
+    db.executescript('''
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE,
+        password TEXT,
+        is_admin INTEGER DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS equipment (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        status TEXT,
+        oil_interval INTEGER,
+        last_oil_change TEXT
+    );
+    CREATE TABLE IF NOT EXISTS notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        equipment_id INTEGER,
+        content TEXT,
+        timestamp TEXT
+    );
+    CREATE TABLE IF NOT EXISTS tickets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        equipment_id INTEGER,
+        equipment_name TEXT,
+        issue TEXT,
+        complete INTEGER DEFAULT 0,
+        unread INTEGER DEFAULT 1
+    );
+    ''')
+    try:
+        db.execute("INSERT INTO users (username, password, is_admin) VALUES (?, ?, ?)", ('Rod', 'admin', 1))
+    except sqlite3.IntegrityError:
+        pass
+    db.commit()
 
-@app.route('/')
-def index():
-    return redirect(url_for('login'))
-
-@app.route('/login', methods=['GET', 'POST'])
+@app.route('/', methods=['GET', 'POST'])
 def login():
-    error = None
     if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        with sqlite3.connect(DB_PATH) as conn:
-            c = conn.cursor()
-            c.execute("SELECT id, is_admin FROM users WHERE username = ? AND password = ?", (username, password))
-            user = c.fetchone()
-            if user:
-                session['user'] = username
-                session['user_id'] = user[0]
-                session['admin'] = bool(user[1])
-                return redirect(url_for('dashboard'))
-            error = 'Invalid credentials'
-    return render_template('login.html', error=error)
+        username = request.form.get('username')
+        password = request.form.get('password')
+        db = get_db()
+        user = db.execute("SELECT * FROM users WHERE username=? AND password=?", (username, password)).fetchone()
+        if user:
+            session['user'] = user['username']
+            session['is_admin'] = bool(user['is_admin'])
+            return redirect(url_for('dashboard'))
+        else:
+            return render_template('login.html', error="Invalid credentials")
+    return render_template('login.html')
 
 @app.route('/logout')
 def logout():
@@ -54,153 +71,205 @@ def logout():
 def dashboard():
     if 'user' not in session:
         return redirect(url_for('login'))
-    return render_template('dashboard.html', user=session['user'], is_admin=session.get('admin', False))
 
-@app.route('/equipment', methods=['GET', 'POST'])
-def equipment():
+    db = get_db()
+    equipment_raw = db.execute("SELECT * FROM equipment").fetchall()
+    equipment = []
+    for e in equipment_raw:
+        last_oil = datetime.strptime(e['last_oil_change'], "%Y-%m-%d").date()
+        days_left = e['oil_interval'] - (datetime.today().date() - last_oil).days
+        e = dict(e)
+        e['days_left'] = max(days_left, 0)
+        equipment.append(e)
+
+    unread = db.execute("SELECT COUNT(*) FROM tickets WHERE unread=1").fetchone()[0]
+    return render_template('dashboard.html', user=session['user'], is_admin=session.get('is_admin', False), equipment=equipment, unread=unread)
+
+@app.route('/add_equipment', methods=['GET', 'POST'])
+def add_equipment():
     if 'user' not in session:
         return redirect(url_for('login'))
+
     if request.method == 'POST':
         name = request.form['name']
-        type_ = request.form['type']
         status = request.form['status']
-        oil_interval = int(request.form['oil_interval'])
-        next_due = (datetime.now() + timedelta(days=oil_interval)).date()
-        with sqlite3.connect(DB_PATH) as conn:
-            c = conn.cursor()
-            c.execute("INSERT INTO equipment (name, type, status, oil_interval, next_oil_change) VALUES (?, ?, ?, ?, ?)",
-                      (name, type_, status, oil_interval, next_due))
+        if status == '__custom__':
+            status = request.form.get('custom_status', status)
+        interval = int(request.form['interval'])
+        db = get_db()
+        db.execute("INSERT INTO equipment (name, status, oil_interval, last_oil_change) VALUES (?, ?, ?, ?)",
+                   (name, status, interval, datetime.today().strftime('%Y-%m-%d')))
+        db.commit()
         return redirect(url_for('dashboard'))
-    return render_template('equipment_form.html')
+    return render_template('equipment.html')
 
-@app.route('/equipment/<int:equipment_id>/note', methods=['POST'])
-def add_note(equipment_id):
+@app.route('/update_equipment/<int:equipment_id>', methods=['POST'])
+def update_equipment(equipment_id):
     if 'user' not in session:
         return redirect(url_for('login'))
-    note = request.form['note']
-    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("INSERT INTO notes (equipment_id, content, timestamp) VALUES (?, ?, ?)", (equipment_id, note, timestamp))
+
+    status = request.form['status']
+    if status == '__custom__':
+        status = request.form.get('custom_status', status)
+    interval = request.form['interval']
+    db = get_db()
+    db.execute("UPDATE equipment SET status=?, oil_interval=? WHERE id=?", (status, interval, equipment_id))
+    db.execute("INSERT INTO notes (equipment_id, content, timestamp) VALUES (?, ?, ?)",
+               (equipment_id, f"Updated status to {status} and oil interval to {interval} days", datetime.now().isoformat()))
+    db.commit()
     return redirect(url_for('dashboard'))
-
-@app.route('/api/equipment')
-def api_equipment():
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("SELECT id, name, type, status, oil_interval, next_oil_change FROM equipment")
-        rows = c.fetchall()
-        equipment = []
-        for row in rows:
-            days = (datetime.strptime(row[5], "%Y-%m-%d") - datetime.now()).days
-            equipment.append({
-                "id": row[0], "name": row[1], "type": row[2],
-                "status": row[3], "oil_interval": row[4],
-                "next_oil_change": row[5], "days_remaining": days
-            })
-        return jsonify(equipment)
-
-@app.route('/submit_ticket', methods=['GET', 'POST'])
-def submit_ticket():
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("SELECT id, name FROM equipment")
-        equipment_list = c.fetchall()
-
-    if request.method == 'POST':
-        eq_id = request.form.get('equipment_id')
-        eq_name = request.form.get('custom_name')
-        issue = request.form['issue']
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-        with sqlite3.connect(DB_PATH) as conn:
-            c = conn.cursor()
-            if eq_id:
-                c.execute("INSERT INTO tickets (equipment_id, equipment_name, issue, submitted_at) VALUES (?, ?, ?, ?)",
-                          (eq_id, '', issue, timestamp))
-                c.execute("UPDATE equipment SET status = ? WHERE id = ?", ('Broken', eq_id))
-            else:
-                c.execute("INSERT INTO equipment (name, type, status, oil_interval, next_oil_change) VALUES (?, ?, ?, ?, ?)",
-                          (eq_name, 'Unknown', 'Broken', 30, (datetime.now() + timedelta(days=30)).date()))
-                new_id = c.lastrowid
-                c.execute("INSERT INTO tickets (equipment_id, equipment_name, issue, submitted_at) VALUES (?, ?, ?, ?)",
-                          (new_id, '', issue, timestamp))
-        return redirect(url_for('submit_ticket'))
-
-    return render_template('submit_ticket.html', equipment=equipment_list)
 
 @app.route('/tickets')
 def view_tickets():
     if 'user' not in session:
         return redirect(url_for('login'))
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("SELECT id, equipment_id, issue, submitted_at, completed FROM tickets WHERE completed = 0")
-        tickets = c.fetchall()
+
+    db = get_db()
+    tickets = db.execute("SELECT * FROM tickets WHERE complete=0").fetchall()
     return render_template('tickets.html', tickets=tickets)
 
-@app.route('/tickets/<int:ticket_id>/complete', methods=['POST'])
-def complete_ticket(ticket_id):
-    if 'user' not in session:
-        return redirect(url_for('login'))
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("SELECT equipment_id, issue FROM tickets WHERE id = ?", (ticket_id,))
-        ticket = c.fetchone()
-        if ticket:
-            eq_id, issue = ticket
-            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            c.execute("UPDATE equipment SET status = ? WHERE id = ?", ("Working", eq_id))
-            c.execute("INSERT INTO notes (equipment_id, content, timestamp) VALUES (?, ?, ?)",
-                      (eq_id, f"Ticket resolved: {issue}", timestamp))
-            c.execute("UPDATE tickets SET completed = 1 WHERE id = ?", (ticket_id,))
-    return redirect(url_for('view_tickets'))
-
-@app.route('/admin', methods=['GET', 'POST'])
+@app.route('/admin')
 def admin_panel():
-    if 'user' not in session or not session.get('admin'):
-        return redirect(url_for('login'))
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        if request.method == 'POST':
-            if 'add_user' in request.form:
-                new_user = request.form['new_username']
-                new_pass = request.form['new_password']
-                is_admin = 1 if 'is_admin' in request.form else 0
-                c.execute("INSERT OR IGNORE INTO users (username, password, is_admin) VALUES (?, ?, ?)",
-                          (new_user, new_pass, is_admin))
-            elif 'remove_user' in request.form:
-                user_id = request.form['user_id']
-                c.execute("DELETE FROM users WHERE id = ?", (user_id,))
-        c.execute("SELECT id, username, is_admin FROM users")
-        users = c.fetchall()
-    return render_template('admin_panel.html', users=users)
+    if not session.get('is_admin'):
+        return redirect(url_for('dashboard'))
 
+    db = get_db()
+    users = db.execute("SELECT * FROM users").fetchall()
+    return render_template('admin.html', users=users)
 
-@app.route('/equipment/<int:equipment_id>/update', methods=['POST'])
-def update_equipment(equipment_id):
+@app.route('/notes/<int:equipment_id>')
+def view_notes(equipment_id):
     if 'user' not in session:
         return redirect(url_for('login'))
-    status = request.form['status']
-    oil_interval = int(request.form['oil_interval'])
-    next_due = (datetime.now() + timedelta(days=oil_interval)).date()
-    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("UPDATE equipment SET status = ?, oil_interval = ?, next_oil_change = ? WHERE id = ?",
-                  (status, oil_interval, next_due, equipment_id))
-        c.execute("INSERT INTO notes (equipment_id, content, timestamp) VALUES (?, ?, ?)",
-                  (equipment_id, f"Updated status to '{status}' and interval to {oil_interval} days", timestamp))
+
+    db = get_db()
+    equipment = db.execute("SELECT * FROM equipment WHERE id = ?", (equipment_id,)).fetchone()
+    notes = db.execute("SELECT * FROM notes WHERE equipment_id = ? ORDER BY timestamp DESC", (equipment_id,)).fetchall()
+    return render_template('notes.html', equipment=equipment, notes=notes)
+
+@app.route('/add_note/<int:equipment_id>', methods=['POST'])
+def add_note(equipment_id):
+    content = request.form.get('note')
+    if not content:
+        return "Note content cannot be empty", 400
+
+    db = get_db()
+    db.execute("INSERT INTO notes (equipment_id, content, timestamp) VALUES (?, ?, ?)",
+               (equipment_id, content, datetime.now().isoformat()))
+    db.commit()
+    return redirect(url_for('view_notes', equipment_id=equipment_id))
+
+@app.route('/edit_note/<int:note_id>', methods=['POST'])
+def edit_note(note_id):
+    new_content = request.form.get('note')
+    if not new_content:
+        return "Note content is required", 400
+
+    db = get_db()
+    db.execute("UPDATE notes SET content = ?, timestamp = ? WHERE id = ?", 
+               (new_content, datetime.now().isoformat(), note_id))
+    db.commit()
+    equipment_id = db.execute("SELECT equipment_id FROM notes WHERE id = ?", (note_id,)).fetchone()['equipment_id']
+    return redirect(url_for('view_notes', equipment_id=equipment_id))
+
+@app.route('/delete_note/<int:note_id>')
+def delete_note(note_id):
+    db = get_db()
+    equipment_id = db.execute("SELECT equipment_id FROM notes WHERE id = ?", (note_id,)).fetchone()['equipment_id']
+    db.execute("DELETE FROM notes WHERE id = ?", (note_id,))
+    db.commit()
+    return redirect(url_for('view_notes', equipment_id=equipment_id))
+
+@app.route('/add_user', methods=['POST'])
+def add_user():
+    username = request.form['username']
+    password = request.form['password']
+    is_admin = 1 if 'is_admin' in request.form else 0
+    db = get_db()
+    try:
+        db.execute("INSERT INTO users (username, password, is_admin) VALUES (?, ?, ?)", (username, password, is_admin))
+        db.commit()
+    except sqlite3.IntegrityError:
+        pass
+    return redirect(url_for('admin_panel'))
+
+@app.route('/change_password', methods=['POST'])
+def change_password():
+    username = request.form.get('username')
+    current_password = request.form.get('current_password')
+    new_password = request.form.get('new_password')
+
+    if not username or not current_password or not new_password:
+        return "Missing required fields", 400
+
+    db = get_db()
+    user = db.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+
+    if user is None or user['password'] != current_password:
+        return "Invalid current password", 403
+
+    db.execute("UPDATE users SET password = ? WHERE username = ?", (new_password, username))
+    db.commit()
+
+    return redirect(url_for('admin_panel'))
+
+@app.route('/delete_user/<int:user_id>')
+def delete_user(user_id):
+    db = get_db()
+    db.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    db.commit()
+    return redirect(url_for('admin_panel'))
+
+@app.route('/delete_equipment/<int:equipment_id>')
+def delete_equipment(equipment_id):
+    db = get_db()
+    db.execute("DELETE FROM equipment WHERE id = ?", (equipment_id,))
+    db.execute("DELETE FROM notes WHERE equipment_id = ?", (equipment_id,))
+    db.execute("DELETE FROM tickets WHERE equipment_id = ?", (equipment_id,))
+    db.commit()
     return redirect(url_for('dashboard'))
 
+@app.route('/submit_ticket', methods=['GET', 'POST'])
+def submit_ticket():
+    db = get_db()
+    if request.method == 'POST':
+        equipment_id = request.form.get('equipment_id')
+        equipment_name = request.form.get('equipment_name')
+        issue = request.form.get('issue')
+
+        if equipment_id:
+            equipment_id = int(equipment_id)
+            equipment = db.execute("SELECT name FROM equipment WHERE id = ?", (equipment_id,)).fetchone()
+            equipment_name = equipment['name'] if equipment else equipment_name
+        else:
+            db.execute("INSERT INTO equipment (name, status, oil_interval, last_oil_change) VALUES (?, ?, ?, ?)",
+                       (equipment_name, 'Reported Issue', 30, datetime.today().strftime('%Y-%m-%d')))
+            equipment_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+        db.execute("INSERT INTO tickets (equipment_id, equipment_name, issue, unread) VALUES (?, ?, ?, 1)",
+                   (equipment_id, equipment_name, issue))
+        db.execute("UPDATE equipment SET status = ? WHERE id = ?", ('Reported Issue', equipment_id))
+        db.commit()
+        return redirect(url_for('login'))
+
+    equipment = db.execute("SELECT * FROM equipment").fetchall()
+    return render_template('submit_ticket.html', equipment=equipment)
+
+@app.route('/mark_ticket_read/<int:ticket_id>')
+def mark_ticket_read(ticket_id):
+    db = get_db()
+    db.execute("UPDATE tickets SET unread = 0 WHERE id = ?", (ticket_id,))
+    db.commit()
+    return redirect(url_for('view_tickets'))
+
+@app.route('/complete_ticket/<int:ticket_id>')
+def complete_ticket(ticket_id):
+    db = get_db()
+    db.execute("UPDATE tickets SET complete = 1 WHERE id = ?", (ticket_id,))
+    db.commit()
+    return redirect(url_for('view_tickets'))
 
 
-@app.route('/tickets/unread')
-def unread_tickets():
-    if 'user' not in session:
-        return jsonify({"new_tickets": False})
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("SELECT COUNT(*) FROM tickets WHERE completed = 0")
-        count = c.fetchone()[0]
-    return jsonify({"new_tickets": count > 0})
+if __name__ == '__main__':
+    create_tables()
+    app.run(debug=True)
