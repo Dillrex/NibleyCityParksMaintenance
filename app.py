@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import sqlite3
 
 app = Flask(__name__)
-app.secret_key = 'supersecretkey'
+app.secret_key = 'NibleyCityParks9325743'
 DB_PATH = 'database.db'
 
 def init_db():
