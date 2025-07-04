@@ -1,3 +1,5 @@
+flask
+gunicorn
 attrs==25.3.0
 cachetools==5.5.2
 certifi==2025.6.15
